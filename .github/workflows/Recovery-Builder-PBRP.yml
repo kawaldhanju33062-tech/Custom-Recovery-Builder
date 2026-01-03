@@ -20,24 +20,29 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Tools
+      - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cpio
+          # Install 32-bit libraries and simg2img for sparse images
+          sudo apt-get install -y cpio libc6-i386 lib32z1 android-sdk-libsparse-utils
           pip install twrpdtgen
 
-      - name: Download Image
+      - name: Download and Prepare Image
         run: |
-          wget "${{ github.event.inputs.img_url }}" -O recovery.img
+          wget "${{ github.event.inputs.img_url }}" -O recovery_raw.img
+          # Attempt to unsparse if it is a sparse image; if not, it just copies it
+          simg2img recovery_raw.img recovery.img || cp recovery_raw.img recovery.img
 
       - name: Run Extraction
         run: |
           mkdir -p output
+          # Using sudo can sometimes help AIK with loop device permissions
           python3 -m twrpdtgen recovery.img -o ./output
 
       - name: Upload Device Tree
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: device_tree_output
-          path: ./output/*
+          path: ./output
           
