@@ -1,66 +1,59 @@
-name: Extract Recovery Device Tree
+name: Modify Recovery Image
 
 on:
   workflow_dispatch:
     inputs:
       img_url:
-        description: 'Direct Link to recovery.img (e.g., https://dl.twrp.me/m14x/twrp.img)'
+        description: 'Link to recovery.img'
         required: true
-        type: string
 
 jobs:
-  extract:
+  modify:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install System Dependencies
+      - name: Install Dependencies
         run: |
-          sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y lib32z1 libc6:i386 libstdc++6:i386 \
-            cpio python3-pip android-sdk-libsparse-utils file wget
+          sudo apt-get install -y cpio python3 android-sdk-libsparse-utils
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
-      - name: Install twrpdtgen
-        run: pip install twrpdtgen
-
-      - name: Download and Prepare Image
+      - name: Setup AIK
         run: |
-          # 1. Clean the URL: Remove .html if present
-          CLEAN_URL=$(echo "${{ github.event.inputs.img_url }}" | sed 's/\.html$//')
-          echo "Downloading from: $CLEAN_URL"
+          git clone https://github.com/osm0sis/Android-Image-Kitchen.git AIK
+          chmod -R +x AIK/*.sh AIK/bin/*.elf AIK/bin/magic
 
-          # 2. Download with Referer to bypass TWRP's hotlink protection
-          # We use the base directory of the URL as the referer
-          REFERER_URL=$(echo "$CLEAN_URL" | sed 's|/[^/]*$|/|')
-          wget --referer="$REFERER_URL" -O recovery_input.img "$CLEAN_URL"
-          
-          # 3. Verify if it's a real image
-          if file recovery_input.img | grep -q "HTML document"; then
-            echo "ERROR: Downloaded an HTML page instead of an image."
-            echo "Please check the URL: $CLEAN_URL"
-            exit 1
-          fi
-          
-          # 4. Handle sparse images (common in stock firmware)
+      - name: Download Recovery
+        run: |
+          CLEAN_URL=$(echo "${{ github.event.inputs.img_url }}" | sed 's/\.html$//')
+          wget --referer="https://dl.twrp.me/" -O recovery_input.img "$CLEAN_URL"
           simg2img recovery_input.img recovery.img || cp recovery_input.img recovery.img
 
-      - name: Run Extraction
+      - name: Unpack Image
         run: |
-          mkdir -p output
-          # Run the generator
-          python3 -m twrpdtgen recovery.img -o ./output
+          cp recovery.img AIK/
+          cd AIK
+          ./unpackimg.sh recovery.img
 
-      - name: Upload Device Tree
-        if: success()
+      - name: Make Changes
+        run: |
+          # EXAMPLE CHANGES:
+          # You can add commands here to edit files in AIK/ramdisk/
+          # For example, to change a property:
+          # sed -i 's/ro.debuggable=0/ro.debuggable=1/g' AIK/ramdisk/default.prop || true
+          
+          echo "Modifications complete."
+
+      - name: Repack Image
+        run: |
+          cd AIK
+          ./repackimg.sh
+          # The new image is created as 'image-new.img'
+
+      - name: Upload Modified Image
         uses: actions/upload-artifact@v4
         with:
-          name: device_tree_artifact
-          path: ./output/
+          name: modified-recovery
+          path: AIK/image-new.img
           
