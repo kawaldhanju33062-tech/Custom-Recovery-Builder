@@ -1,48 +1,59 @@
-name: Extract Recovery Device Tree
+name: Extract Device Tree
 
 on:
   workflow_dispatch:
     inputs:
       img_url:
-        description: 'Paste the direct link to recovery.img'
+        description: 'Direct Link to recovery.img'
         required: true
-        type: string
 
 jobs:
-  build:
+  extract:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install System Dependencies (32-bit fix)
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y lib32z1 libc6:i386 libstdc++6:i386 \
+            cpio python3-pip android-sdk-libsparse-utils file
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          # Install 32-bit libraries and simg2img for sparse images
-          sudo apt-get install -y cpio libc6-i386 lib32z1 android-sdk-libsparse-utils
-          pip install twrpdtgen
+      - name: Install twrpdtgen
+        run: pip install twrpdtgen
 
-      - name: Download and Prepare Image
+      - name: Download and Verify Image
         run: |
-          wget "${{ github.event.inputs.img_url }}" -O recovery_raw.img
-          # Attempt to unsparse if it is a sparse image; if not, it just copies it
-          simg2img recovery_raw.img recovery.img || cp recovery_raw.img recovery.img
+          # Download the file
+          wget -O recovery_input.img "${{ github.event.inputs.img_url }}"
+          
+          # Check if it's actually an Android boot image or just HTML
+          if ! file recovery_input.img | grep -q "Android boot img"; then
+            echo "ERROR: The downloaded file is NOT a valid Android image."
+            echo "Check your download link! It might be a web page instead of a file."
+            file recovery_input.img
+            exit 1
+          fi
+          
+          # Unsparse if necessary
+          simg2img recovery_input.img recovery.img || cp recovery_input.img recovery.img
 
       - name: Run Extraction
         run: |
           mkdir -p output
-          # Using sudo can sometimes help AIK with loop device permissions
           python3 -m twrpdtgen recovery.img -o ./output
 
-      - name: Upload Device Tree
+      - name: Upload Result
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: device_tree_output
+          name: device_tree
           path: ./output
           
