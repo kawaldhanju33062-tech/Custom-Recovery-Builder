@@ -17,46 +17,46 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cpio python3 android-sdk-libsparse-utils file
+          sudo apt-get install -y cpio python3 android-sdk-libsparse-utils file wget tar
 
-      - name: Setup AIK (Linux Version)
+      - name: Setup AIK (Linux Binaries)
         run: |
-          # Download the Linux version of AIK
-          wget https://forum.xda-developers.com/attachments/android-image-kitchen-v3-8-linux-tar-gz.5334003/ -O AIK-Linux.tar.gz || \
-          wget https://github.com/osm0sis/Android-Image-Kitchen/archive/refs/heads/master.zip -O AIK.zip
-          
-          # Since XDA links can be tricky, we'll use a reliable mirror or the source
-          # Let's use a known working Linux port for Actions:
-          git clone https://github.com/TwrpBuilder/android_image_kitchen_linux.git AIK
+          # Create AIK directory
+          mkdir AIK
+          # Download a pre-compiled Linux AIK bundle from a reliable source
+          wget https://github.com/SebaUbuntu/AIK-Linux-Mirror/archive/refs/heads/master.tar.gz -O aik.tar.gz
+          tar -xzf aik.tar.gz --strip-components=1 -C AIK
+          # Set permissions
           chmod -R +x AIK/*.sh
           chmod -R +x AIK/bin/*
 
       - name: Download Recovery
         run: |
+          # Clean URL and handle TWRP Referer
           CLEAN_URL=$(echo "${{ github.event.inputs.img_url }}" | sed 's/\.html$//')
           wget --referer="https://dl.twrp.me/" -O recovery_input.img "$CLEAN_URL"
+          # Convert sparse to raw if needed
           simg2img recovery_input.img recovery.img || cp recovery_input.img recovery.img
 
       - name: Unpack Image
         run: |
           cd AIK
           ./unpackimg.sh ../recovery.img
-          # This creates 'ramdisk' and 'split_img' folders inside AIK/
 
       - name: Make Changes
         run: |
-          # --- YOUR CHANGES START HERE ---
-          # Example: To edit the build.prop inside the ramdisk:
-          # sed -i 's/ro.build.display.id=.*/ro.build.display.id=MyCustomRecovery/g' AIK/ramdisk/default.prop || true
+          echo "Current files in ramdisk:"
+          ls AIK/ramdisk/
           
-          echo "Applying modifications..."
-          # --- YOUR CHANGES END HERE ---
+          # --- ADD YOUR CUSTOM CHANGES HERE ---
+          # Example: To change the recovery theme color or default properties:
+          # touch AIK/ramdisk/custom_marker_file 
+          # -------------------------------------
 
       - name: Repack Image
         run: |
           cd AIK
           ./repackimg.sh
-          # The result is 'image-new.img' in the AIK folder
 
       - name: Upload Modified Image
         uses: actions/upload-artifact@v4
