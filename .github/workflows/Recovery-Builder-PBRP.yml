@@ -36,29 +36,27 @@ jobs:
       - name: Unpack Image
         run: |
           cd AIK
-          ./unpackimg.sh ../recovery.img
+          # AIK must run with sudo to handle Android file permissions
+          sudo ./unpackimg.sh ../recovery.img
 
       - name: Make Changes
         run: |
-          # Add a test file to prove the ramdisk was modified
-          touch AIK/ramdisk/modified_by_gemini.txt
-          echo "Applied changes to ramdisk."
+          # Use sudo here to bypass the "Permission denied" error
+          sudo touch AIK/ramdisk/modified_by_gemini.txt
+          echo "Applied changes to ramdisk with root permissions."
 
       - name: Repack Image
         run: |
           cd AIK
-          ./repackimg.sh
+          # Repack also needs sudo to read the restricted ramdisk files
+          sudo ./repackimg.sh
           echo "Checking for output files..."
-          ls -lh  # This will show us the contents of the AIK folder in the logs
+          ls -lh image-new.img || echo "Image not found yet"
 
       - name: Upload Resulting Image
-        if: always() # Upload even if previous steps had warnings
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: modified-recovery-output
-          # We use a wildcard to catch 'image-new.img' or whatever AIK produced
-          path: |
-            AIK/image-new.img
-            AIK/unsigned-new.img
-            AIK/split_img/*
-            
+          name: modified-recovery
+          path: AIK/image-new.img
+          
