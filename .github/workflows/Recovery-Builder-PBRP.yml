@@ -19,23 +19,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cpio python3 android-sdk-libsparse-utils file wget tar
 
-      - name: Setup AIK (Linux Binaries)
+      - name: Setup AIK
         run: |
-          # Create AIK directory
           mkdir AIK
-          # Download a pre-compiled Linux AIK bundle from a reliable source
           wget https://github.com/SebaUbuntu/AIK-Linux-Mirror/archive/refs/heads/master.tar.gz -O aik.tar.gz
           tar -xzf aik.tar.gz --strip-components=1 -C AIK
-          # Set permissions
           chmod -R +x AIK/*.sh
           chmod -R +x AIK/bin/*
 
       - name: Download Recovery
         run: |
-          # Clean URL and handle TWRP Referer
           CLEAN_URL=$(echo "${{ github.event.inputs.img_url }}" | sed 's/\.html$//')
           wget --referer="https://dl.twrp.me/" -O recovery_input.img "$CLEAN_URL"
-          # Convert sparse to raw if needed
           simg2img recovery_input.img recovery.img || cp recovery_input.img recovery.img
 
       - name: Unpack Image
@@ -45,22 +40,25 @@ jobs:
 
       - name: Make Changes
         run: |
-          echo "Current files in ramdisk:"
-          ls AIK/ramdisk/
-          
-          # --- ADD YOUR CUSTOM CHANGES HERE ---
-          # Example: To change the recovery theme color or default properties:
-          # touch AIK/ramdisk/custom_marker_file 
-          # -------------------------------------
+          # Add a test file to prove the ramdisk was modified
+          touch AIK/ramdisk/modified_by_gemini.txt
+          echo "Applied changes to ramdisk."
 
       - name: Repack Image
         run: |
           cd AIK
           ./repackimg.sh
+          echo "Checking for output files..."
+          ls -lh  # This will show us the contents of the AIK folder in the logs
 
-      - name: Upload Modified Image
+      - name: Upload Resulting Image
+        if: always() # Upload even if previous steps had warnings
         uses: actions/upload-artifact@v4
         with:
-          name: modified-recovery
-          path: AIK/image-new.img
-          
+          name: modified-recovery-output
+          # We use a wildcard to catch 'image-new.img' or whatever AIK produced
+          path: |
+            AIK/image-new.img
+            AIK/unsigned-new.img
+            AIK/split_img/*
+            
