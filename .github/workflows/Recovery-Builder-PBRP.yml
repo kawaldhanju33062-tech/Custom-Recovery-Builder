@@ -17,12 +17,19 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cpio python3 android-sdk-libsparse-utils
+          sudo apt-get install -y cpio python3 android-sdk-libsparse-utils file
 
-      - name: Setup AIK
+      - name: Setup AIK (Linux Version)
         run: |
-          git clone https://github.com/osm0sis/Android-Image-Kitchen.git AIK
-          chmod -R +x AIK/*.sh AIK/bin/*.elf AIK/bin/magic
+          # Download the Linux version of AIK
+          wget https://forum.xda-developers.com/attachments/android-image-kitchen-v3-8-linux-tar-gz.5334003/ -O AIK-Linux.tar.gz || \
+          wget https://github.com/osm0sis/Android-Image-Kitchen/archive/refs/heads/master.zip -O AIK.zip
+          
+          # Since XDA links can be tricky, we'll use a reliable mirror or the source
+          # Let's use a known working Linux port for Actions:
+          git clone https://github.com/TwrpBuilder/android_image_kitchen_linux.git AIK
+          chmod -R +x AIK/*.sh
+          chmod -R +x AIK/bin/*
 
       - name: Download Recovery
         run: |
@@ -32,24 +39,24 @@ jobs:
 
       - name: Unpack Image
         run: |
-          cp recovery.img AIK/
           cd AIK
-          ./unpackimg.sh recovery.img
+          ./unpackimg.sh ../recovery.img
+          # This creates 'ramdisk' and 'split_img' folders inside AIK/
 
       - name: Make Changes
         run: |
-          # EXAMPLE CHANGES:
-          # You can add commands here to edit files in AIK/ramdisk/
-          # For example, to change a property:
-          # sed -i 's/ro.debuggable=0/ro.debuggable=1/g' AIK/ramdisk/default.prop || true
+          # --- YOUR CHANGES START HERE ---
+          # Example: To edit the build.prop inside the ramdisk:
+          # sed -i 's/ro.build.display.id=.*/ro.build.display.id=MyCustomRecovery/g' AIK/ramdisk/default.prop || true
           
-          echo "Modifications complete."
+          echo "Applying modifications..."
+          # --- YOUR CHANGES END HERE ---
 
       - name: Repack Image
         run: |
           cd AIK
           ./repackimg.sh
-          # The new image is created as 'image-new.img'
+          # The result is 'image-new.img' in the AIK folder
 
       - name: Upload Modified Image
         uses: actions/upload-artifact@v4
