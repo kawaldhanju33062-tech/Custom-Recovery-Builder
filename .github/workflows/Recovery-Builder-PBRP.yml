@@ -1,11 +1,12 @@
-name: Extract Device Tree
+name: Extract Recovery Device Tree
 
 on:
   workflow_dispatch:
     inputs:
       img_url:
-        description: 'Direct Link to recovery.img'
+        description: 'Direct Link to recovery.img (e.g., https://dl.twrp.me/m14x/twrp.img)'
         required: true
+        type: string
 
 jobs:
   extract:
@@ -14,12 +15,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install System Dependencies (32-bit fix)
+      - name: Install System Dependencies
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y lib32z1 libc6:i386 libstdc++6:i386 \
-            cpio python3-pip android-sdk-libsparse-utils file
+            cpio python3-pip android-sdk-libsparse-utils file wget
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -29,31 +30,37 @@ jobs:
       - name: Install twrpdtgen
         run: pip install twrpdtgen
 
-      - name: Download and Verify Image
+      - name: Download and Prepare Image
         run: |
-          # Download the file
-          wget -O recovery_input.img "${{ github.event.inputs.img_url }}"
+          # 1. Clean the URL: Remove .html if present
+          CLEAN_URL=$(echo "${{ github.event.inputs.img_url }}" | sed 's/\.html$//')
+          echo "Downloading from: $CLEAN_URL"
+
+          # 2. Download with Referer to bypass TWRP's hotlink protection
+          # We use the base directory of the URL as the referer
+          REFERER_URL=$(echo "$CLEAN_URL" | sed 's|/[^/]*$|/|')
+          wget --referer="$REFERER_URL" -O recovery_input.img "$CLEAN_URL"
           
-          # Check if it's actually an Android boot image or just HTML
-          if ! file recovery_input.img | grep -q "Android boot img"; then
-            echo "ERROR: The downloaded file is NOT a valid Android image."
-            echo "Check your download link! It might be a web page instead of a file."
-            file recovery_input.img
+          # 3. Verify if it's a real image
+          if file recovery_input.img | grep -q "HTML document"; then
+            echo "ERROR: Downloaded an HTML page instead of an image."
+            echo "Please check the URL: $CLEAN_URL"
             exit 1
           fi
           
-          # Unsparse if necessary
+          # 4. Handle sparse images (common in stock firmware)
           simg2img recovery_input.img recovery.img || cp recovery_input.img recovery.img
 
       - name: Run Extraction
         run: |
           mkdir -p output
+          # Run the generator
           python3 -m twrpdtgen recovery.img -o ./output
 
-      - name: Upload Result
-        if: always()
+      - name: Upload Device Tree
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: device_tree
-          path: ./output
+          name: device_tree_artifact
+          path: ./output/
           
